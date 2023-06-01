@@ -1,7 +1,7 @@
 /**
  * WinBox.js
  * Copyright 2022 Nextapps GmbH
- * Author: Thomas Wilkerling
+ * Update: Kangzw
  * Licence: Apache-2.0
  * https://github.com/nextapps-de/winbox
  */
@@ -13,6 +13,8 @@ import { addListener, removeListener, setStyle, setText, getByClass, addClass, r
 
 const use_raf = false;
 const stack_min = [];
+const list = [];
+const _list = [];
 // use passive for touch and mouse wheel
 const eventOptions = { "capture": true, "passive": true };
 let body;
@@ -31,9 +33,9 @@ let root_w, root_h;
  * @this WinBox
  */
 
-function WinBox(params, _title){
+function WinBox(params, _title) {
 
-    if(!(this instanceof WinBox)) {
+    if (!(this instanceof WinBox)) {
 
         return new WinBox(params);
     }
@@ -56,6 +58,7 @@ function WinBox(params, _title){
         minheight,
         maxwidth,
         maxheight,
+        scale,
         autosize,
 
         x,
@@ -70,11 +73,14 @@ function WinBox(params, _title){
         max,
         hidden,
         modal,
+        alwaysShow,
 
         background,
         border,
         header,
         classname,
+        remark,
+        clazz,
 
         oncreate,
         onclose,
@@ -90,19 +96,19 @@ function WinBox(params, _title){
         onshow,
         onload;
 
-    if(params){
+    if (params) {
 
-        if(_title){
+        if (_title) {
 
             title = params;
             params = _title;
         }
 
-        if(typeof params === "string"){
+        if (typeof params === "string") {
 
             title = params;
         }
-        else{
+        else {
 
             id = params["id"];
             index = params["index"];
@@ -116,6 +122,7 @@ function WinBox(params, _title){
 
             width = params["width"];
             height = params["height"];
+            scale = params['scale'] || 1;
             minwidth = params["minwidth"];
             minheight = params["minheight"];
             maxwidth = params["maxwidth"];
@@ -126,6 +133,7 @@ function WinBox(params, _title){
             max = params["max"];
             hidden = params["hidden"];
             modal = params["modal"];
+            alwaysShow = params["alwaysShow"];
 
             x = params["x"] || (modal ? "center" : 0);
             y = params["y"] || (modal ? "center" : 0);
@@ -139,6 +147,8 @@ function WinBox(params, _title){
             border = params["border"];
             header = params["header"];
             classname = params["class"];
+            clazz = params['class'];
+            remark = params['remark'];
 
             onclose = params["onclose"];
             onfocus = params["onfocus"];
@@ -155,6 +165,13 @@ function WinBox(params, _title){
         }
     }
 
+    if (id) {
+        const obj = [...WinBox['list'], ...WinBox['_list']].filter((item) => item.id === id);
+        if (obj.length) {
+            console.warn(id + ' 重复，创建失败!');
+            return;
+        }
+    }
     this.dom = template(tpl);
     this.dom.id = this.id = id || ("winbox-" + (++id_counter));
     this.dom.className = "winbox" + (classname ? " " + (typeof classname === "string" ? classname : classname.join(" ")) : "") + (modal ? " modal" : "");
@@ -164,21 +181,21 @@ function WinBox(params, _title){
     this.header = header || 35;
     //this.plugins = [];
 
-    if(background){
+    if (background) {
 
         this.setBackground(background);
     }
 
-    if(border){
+    if (border) {
 
         setStyle(this.body, "margin", border + (isNaN(border) ? "" : "px"));
     }
-    else{
+    else {
 
         border = 0;
     }
 
-    if(header){
+    if (header) {
 
         const node = getByClass(this.dom, "wb-header");
         setStyle(node, "height", header + "px");
@@ -186,25 +203,25 @@ function WinBox(params, _title){
         setStyle(this.body, "top", header + "px");
     }
 
-    if(title){
+    if (title) {
 
         this.setTitle(title);
     }
 
-    if(icon){
+    if (icon) {
 
         this.setIcon(icon);
     }
 
-    if(mount){
+    if (mount) {
 
         this.mount(mount);
     }
-    else if(html){
+    else if (html) {
 
         this.body.innerHTML = html;
     }
-    else if(url){
+    else if (url) {
 
         this.setUrl(url, onload);
     }
@@ -222,7 +239,7 @@ function WinBox(params, _title){
     minwidth = minwidth ? parse(minwidth, maxwidth) : 150;
     minheight = minheight ? parse(minheight, maxheight) : this.header;
 
-    if(autosize){
+    if (autosize) {
 
         (root || body).appendChild(this.body);
 
@@ -231,7 +248,7 @@ function WinBox(params, _title){
 
         this.dom.appendChild(this.body);
     }
-    else{
+    else {
 
         width = width ? parse(width, maxwidth) : Math.max(maxwidth / 2, minwidth) | 0;
         height = height ? parse(height, maxheight) : Math.max(maxheight / 2, minheight) | 0;
@@ -248,11 +265,15 @@ function WinBox(params, _title){
     this.minheight = minheight;
     this.maxwidth = maxwidth;
     this.maxheight = maxheight;
+    this.scale = scale;
+    this.alwaysShow = alwaysShow;
+    this.remark = remark;
     this.top = top;
     this.right = right;
     this.bottom = bottom;
     this.left = left;
     this.index = index;
+    this.clazz = clazz;
     //this.border = border;
     this.min = false;
     this.max = false;
@@ -272,44 +293,122 @@ function WinBox(params, _title){
     this.onhide = onhide;
     this.onshow = onshow;
 
-    if(max){
+    if (max) {
 
         this.maximize();
     }
-    else if(min){
+    else if (min) {
 
         this.minimize();
     }
-    else{
+    else {
 
         this.resize().move();
     }
 
-    if(hidden){
-      
+    if (hidden) {
+
         this.hide();
     }
-    else{
+    else {
 
         this.focus();
 
-        if(index || (index === 0)){
+        if (index || (index === 0)) {
 
             this.index = index;
             setStyle(this.dom, "z-index", index);
-            if(index > index_counter) index_counter = index;
+            if (index > index_counter) index_counter = index;
         }
     }
 
     register(this);
     (root || body).appendChild(this.dom);
+
+    if (!this.alwaysShow) {
+        WinBox['list'].push(this);
+    } else {
+        WinBox['_list'].push(this);
+    }
+
     (oncreate = params["oncreate"]) && oncreate.call(this, params);
 }
 
-WinBox["new"] = function(params){
+WinBox["new"] = function (params) {
 
     return new WinBox(params);
 };
+WinBox['list'] = list;
+WinBox['_list'] = _list;
+// WinBox add query method
+WinBox['query'] = function (condition = null) {
+    const list = WinBox['list'].concat(WinBox['_list']);
+    if (!condition) {
+        return [];
+    } else if (typeof condition === 'string') {
+        // 按照id查询
+        if (condition.startsWith('#')) {
+            return list.filter((item) => item.id === condition.substring(1));
+        }
+        // 按照名字查询
+        else {
+            return list.filter((item) => item.name === condition);
+        }
+    } else if (typeof condition === 'object') {
+        const regular = /^\/.{1,}\/$/;
+        // 按照json条件查询
+        if (isJsonObj(condition)) {
+            const keys = Object.keys(condition);
+            let array = list;
+            keys.forEach((key) => {
+                array = array.filter((obj) => obj[key] === condition[key]);
+            });
+            return array;
+        }
+        // 按照正则表达式查询
+        else if (regular.test(condition)) {
+            return list.filter((item) => condition.test(item.name));
+        }
+    } else {
+        return [];
+    }
+};
+// 关闭弹框 不传递条件默认全部关闭
+WinBox['close'] = function (condition = null) {
+    if (!condition) {
+        const length = WinBox['list'].length;
+        for (let index = length; index > 0; index--) {
+            WinBox['list'][index - 1].close();
+        }
+    } else {
+        WinBox.query(condition).forEach((item) => {
+            if (item.close) {
+                item.close();
+            }
+        });
+    }
+};
+WinBox['closeAll'] = function (force = false) {
+    if (force) {
+        const list = [...WinBox['list'], ...WinBox['_list']];
+        const length = list.length;
+        for (let index = 0; index < length; index++) {
+            if (list[index]) {
+                list[index].close();
+            }
+        }
+    } else {
+        const list = [...WinBox['list']];
+        const length = list.length;
+        for (let index = 0; index < length; index++) {
+            list[index].close();
+        }
+    }
+};
+function isJsonObj(obj) {
+    var isjson = typeof obj == 'object' && Object.prototype.toString.call(obj).toLowerCase() == '[object object]' && !obj.length;
+    return isjson;
+}
 
 export default WinBox;
 
@@ -320,28 +419,28 @@ export default WinBox;
  * @return number
  */
 
-function parse(num, base, center){
+function parse(num, base, center) {
 
-    if(typeof num === "string"){
+    if (typeof num === "string") {
 
-        if(num === "center"){
+        if (num === "center") {
 
             num = ((base - center) / 2) | 0;
         }
-        else if(num === "right" || num === "bottom"){
+        else if (num === "right" || num === "bottom") {
 
             num = (base - center);
         }
-        else{
+        else {
 
             const value = parseFloat(num);
             const unit = (("" + value) !== num) && num.substring(("" + value).length);
 
-            if(unit === "%"){
+            if (unit === "%") {
 
                 num = (base / 100 * value) | 0;
             }
-            else{
+            else {
 
                 num = value;
             }
@@ -351,24 +450,24 @@ function parse(num, base, center){
     return num;
 }
 
-function setup(){
+function setup() {
 
     body = document.body;
 
     body[prefix_request = "requestFullscreen"] ||
-    body[prefix_request = "msRequestFullscreen"] ||
-    body[prefix_request = "webkitRequestFullscreen"] ||
-    body[prefix_request = "mozRequestFullscreen"] ||
-    (prefix_request = "");
+        body[prefix_request = "msRequestFullscreen"] ||
+        body[prefix_request = "webkitRequestFullscreen"] ||
+        body[prefix_request = "mozRequestFullscreen"] ||
+        (prefix_request = "");
 
     prefix_exit = prefix_request && (
 
         prefix_request.replace("request", "exit")
-                      .replace("mozRequest", "mozCancel")
-                      .replace("Request", "Exit")
+            .replace("mozRequest", "mozCancel")
+            .replace("Request", "Exit")
     );
 
-    addListener(window, "resize", function(){
+    addListener(window, "resize", function () {
 
         init();
         update_min_stack();
@@ -381,7 +480,7 @@ function setup(){
  * @param {WinBox} self
  */
 
-function register(self){
+function register(self) {
 
     addWindowListener(self, "drag");
     addWindowListener(self, "n");
@@ -393,36 +492,36 @@ function register(self){
     addWindowListener(self, "se");
     addWindowListener(self, "sw");
 
-    addListener(getByClass(self.dom, "wb-min"), "click", function(event){
+    addListener(getByClass(self.dom, "wb-min"), "click", function (event) {
 
         preventEvent(event);
         self.min ? self.focus().restore() : self.blur().minimize();
     });
 
-    addListener(getByClass(self.dom, "wb-max"), "click", function(event){
+    addListener(getByClass(self.dom, "wb-max"), "click", function (event) {
 
         self.max ? self.restore() : self.maximize();
     });
 
-    if(prefix_request){
+    if (prefix_request) {
 
-        addListener(getByClass(self.dom, "wb-full"), "click", function(event){
+        addListener(getByClass(self.dom, "wb-full"), "click", function (event) {
 
             self.fullscreen();
         });
     }
-    else{
+    else {
 
         self.addClass("no-full");
     }
 
-    addListener(getByClass(self.dom, "wb-close"), "click", function(event){
+    addListener(getByClass(self.dom, "wb-close"), "click", function (event) {
 
         preventEvent(event);
         self.close() || (self = null);
     });
 
-    addListener(self.dom, "click", function(event){
+    addListener(self.dom, "click", function (event) {
 
         // stop propagation would disable global listeners used inside window contents
         // use event bubbling for this listener to skip this handler by the other click listeners
@@ -434,7 +533,7 @@ function register(self){
  * @param {WinBox} self
  */
 
-function remove_min_stack(self){
+function remove_min_stack(self) {
 
     stack_min.splice(stack_min.indexOf(self), 1);
     update_min_stack();
@@ -443,29 +542,29 @@ function remove_min_stack(self){
     self.dom.title = "";
 }
 
-function update_min_stack(){
+function update_min_stack() {
 
     const length = stack_min.length;
     const splitscreen_index = {};
     const splitscreen_length = {};
 
-    for(let i = 0, self, key; i < length; i++){
+    for (let i = 0, self, key; i < length; i++) {
 
         self = stack_min[i];
         key = (self.left || self.right) + ":" + (self.top || self.bottom);
 
-        if(splitscreen_length[key]){
+        if (splitscreen_length[key]) {
 
             splitscreen_length[key]++;
         }
-        else{
+        else {
 
             splitscreen_index[key] = 0;
             splitscreen_length[key] = 1;
         }
     }
 
-    for(let i = 0, self, key, width; i < length; i++){
+    for (let i = 0, self, key, width; i < length; i++) {
 
         self = stack_min[i]
         key = (self.left || self.right) + ":" + (self.top || self.bottom);
@@ -482,10 +581,10 @@ function update_min_stack(){
  * @param {string} dir
  */
 
-function addWindowListener(self, dir){
+function addWindowListener(self, dir) {
 
     const node = getByClass(self.dom, "wb-" + dir);
-    if(!node) return;
+    if (!node) return;
 
     let touch, x, y;
     let raf_timer, raf_move, raf_resize;
@@ -494,32 +593,32 @@ function addWindowListener(self, dir){
     addListener(node, "mousedown", mousedown);
     addListener(node, "touchstart", mousedown, eventOptions);
 
-    function loop(){
+    function loop() {
 
         raf_timer = requestAnimationFrame(loop);
 
-        if(raf_resize){
+        if (raf_resize) {
 
             self.resize();
             raf_resize = false;
         }
 
-        if(raf_move){
+        if (raf_move) {
 
             self.move();
             raf_move = false;
         }
     }
 
-    function mousedown(event){
+    function mousedown(event) {
 
         // prevent the full iteration through the fallback chain of a touch event (touch > mouse > click)
         preventEvent(event);
         self.focus();
 
-        if(dir === "drag"){
+        if (dir === "drag") {
 
-            if(self.min){
+            if (self.min) {
 
                 self.restore();
                 return;
@@ -530,19 +629,19 @@ function addWindowListener(self, dir){
 
             dblclick_timer = now;
 
-            if(diff < 300){
+            if (diff < 300) {
 
                 self.max ? self.restore() : self.maximize();
                 return;
             }
         }
 
-        if(!self.max && !self.min){
+        if (!self.max && !self.min) {
 
             addClass(body, "wb-lock");
             use_raf && loop();
 
-            if((touch = event.touches) && (touch = touch[0])){
+            if ((touch = event.touches) && (touch = touch[0])) {
 
                 event = touch;
 
@@ -551,7 +650,7 @@ function addWindowListener(self, dir){
                 addListener(window, "touchmove", handler_mousemove, eventOptions);
                 addListener(window, "touchend", handler_mouseup, eventOptions);
             }
-            else{
+            else {
 
                 //addListener(this, "mouseleave", handler_mouseup);
                 addListener(window, "mousemove", handler_mousemove);
@@ -569,11 +668,11 @@ function addWindowListener(self, dir){
         }
     }
 
-    function handler_mousemove(event){
+    function handler_mousemove(event) {
 
         preventEvent(event);
 
-        if(touch){
+        if (touch) {
 
             event = event.touches[0];
         }
@@ -590,20 +689,20 @@ function addWindowListener(self, dir){
 
         let resize_w, resize_h, move_x, move_y;
 
-        if(dir === "drag"){
+        if (dir === "drag") {
 
             self.x += offsetX;
             self.y += offsetY;
             move_x = move_y = 1;
         }
-        else{
+        else {
 
-            if(dir === "e" || dir === "se" || dir === "ne"){
+            if (dir === "e" || dir === "se" || dir === "ne") {
 
                 self.width += offsetX;
                 resize_w = 1;
             }
-            else if(dir === "w" || dir === "sw" || dir === "nw"){
+            else if (dir === "w" || dir === "sw" || dir === "nw") {
 
                 self.x += offsetX;
                 self.width -= offsetX;
@@ -611,12 +710,12 @@ function addWindowListener(self, dir){
                 move_x = 1;
             }
 
-            if(dir === "s" || dir === "se" || dir === "sw"){
+            if (dir === "s" || dir === "se" || dir === "sw") {
 
                 self.height += offsetY;
                 resize_h = 1;
             }
-            else if(dir === "n" || dir === "ne" || dir === "nw"){
+            else if (dir === "n" || dir === "ne" || dir === "nw") {
 
                 self.y += offsetY;
                 self.height -= offsetY;
@@ -625,64 +724,64 @@ function addWindowListener(self, dir){
             }
         }
 
-        if(resize_w){
+        if (resize_w) {
 
             self.width = Math.max(Math.min(self.width, self.maxwidth, root_w - self.x - self.right), self.minwidth);
             resize_w = self.width !== old_w;
         }
 
-        if(resize_h){
+        if (resize_h) {
 
             self.height = Math.max(Math.min(self.height, self.maxheight, root_h - self.y - self.bottom), self.minheight);
             resize_h = self.height !== old_h;
         }
 
-        if(resize_w || resize_h){
+        if (resize_w || resize_h) {
 
             use_raf ? raf_resize = true : self.resize();
         }
 
-        if(move_x){
+        if (move_x) {
 
             self.x = Math.max(Math.min(self.x, root_w - self.width - self.right), self.left);
             move_x = self.x !== old_x;
         }
 
-        if(move_y){
+        if (move_y) {
 
             self.y = Math.max(Math.min(self.y, root_h - self.height - self.bottom), self.top);
             move_y = self.y !== old_y;
         }
 
-        if(move_x || move_y){
+        if (move_x || move_y) {
 
             use_raf ? raf_move = true : self.move();
         }
 
-        if(resize_w || move_x){
+        if (resize_w || move_x) {
 
             x = pageX;
         }
 
-        if(resize_h || move_y){
+        if (resize_h || move_y) {
 
             y = pageY;
         }
     }
 
-    function handler_mouseup(event){
+    function handler_mouseup(event) {
 
         preventEvent(event);
         removeClass(body, "wb-lock");
         use_raf && cancelAnimationFrame(raf_timer);
 
-        if(touch){
+        if (touch) {
 
             //removeListener(self.dom, "touchmove", preventEvent);
             removeListener(window, "touchmove", handler_mousemove, eventOptions);
             removeListener(window, "touchend", handler_mouseup, eventOptions);
         }
-        else{
+        else {
 
             //removeListener(this, "mouseleave", handler_mouseup);
             removeListener(window, "mousemove", handler_mousemove);
@@ -691,7 +790,7 @@ function addWindowListener(self, dir){
     }
 }
 
-function init(){
+function init() {
 
     // TODO: the window height of iOS isn't determined correctly when the bottom toolbar disappears
 
@@ -720,7 +819,7 @@ function init(){
  * @this WinBox
  */
 
-WinBox.prototype.mount = function(src){
+WinBox.prototype.mount = function (src) {
 
     // handles mounting over:
     this.unmount();
@@ -737,11 +836,11 @@ WinBox.prototype.mount = function(src){
  * @this WinBox
  */
 
-WinBox.prototype.unmount = function(dest){
+WinBox.prototype.unmount = function (dest) {
 
     const node = this.body.firstChild;
 
-    if(node){
+    if (node) {
 
         const root = dest || node._backstore;
 
@@ -756,7 +855,7 @@ WinBox.prototype.unmount = function(dest){
  * @this WinBox
  */
 
-WinBox.prototype.setTitle = function(title){
+WinBox.prototype.setTitle = function (title) {
 
     const node = getByClass(this.dom, "wb-title");
     setText(node, this.title = title);
@@ -767,7 +866,7 @@ WinBox.prototype.setTitle = function(title){
  * @this WinBox
  */
 
-WinBox.prototype.setIcon = function(src){
+WinBox.prototype.setIcon = function (src) {
 
     const img = getByClass(this.dom, "wb-icon");
     setStyle(img, "background-image", "url(" + src + ")");
@@ -780,7 +879,7 @@ WinBox.prototype.setIcon = function(src){
  * @this WinBox
  */
 
-WinBox.prototype.setBackground = function(background){
+WinBox.prototype.setBackground = function (background) {
 
     setStyle(this.dom, "background", background);
     return this;
@@ -790,15 +889,15 @@ WinBox.prototype.setBackground = function(background){
  * @this WinBox
  */
 
-WinBox.prototype.setUrl = function(url, onload){
+WinBox.prototype.setUrl = function (url, onload) {
 
     const node = this.body.firstChild;
 
-    if(node && (node.tagName.toLowerCase() === "iframe")){
+    if (node && (node.tagName.toLowerCase() === "iframe")) {
 
         node.src = url;
     }
-    else{
+    else {
 
         this.body.innerHTML = '<iframe src="' + url + '"></iframe>';
         onload && (this.body.firstChild.onload = onload);
@@ -812,14 +911,14 @@ WinBox.prototype.setUrl = function(url, onload){
  * @this WinBox
  */
 
-WinBox.prototype.focus = function(state){
+WinBox.prototype.focus = function (state) {
 
-    if(state === false){
+    if (state === false) {
 
         return this.blur();
     }
 
-    if(last_focus !== this && this.dom){
+    if (last_focus !== this && this.dom) {
 
         last_focus && last_focus.blur();
 
@@ -840,14 +939,14 @@ WinBox.prototype.focus = function(state){
  * @this WinBox
  */
 
-WinBox.prototype.blur = function(state){
+WinBox.prototype.blur = function (state) {
 
-    if(state === false){
+    if (state === false) {
 
         return this.focus();
     }
 
-    if(last_focus === this){
+    if (last_focus === this) {
 
         this.removeClass("focus");
         this.focused = false;
@@ -865,14 +964,14 @@ WinBox.prototype.blur = function(state){
  * @this WinBox
  */
 
-WinBox.prototype.hide = function(state){
+WinBox.prototype.hide = function (state) {
 
-    if(state === false){
+    if (state === false) {
 
         return this.show();
     }
 
-    if(!this.hidden){
+    if (!this.hidden) {
 
         this.onhide && this.onhide();
         this.hidden = true;
@@ -885,14 +984,14 @@ WinBox.prototype.hide = function(state){
  * @this WinBox
  */
 
-WinBox.prototype.show = function(state){
+WinBox.prototype.show = function (state) {
 
-    if(state === false){
+    if (state === false) {
 
         return this.hide();
     }
 
-    if(this.hidden){
+    if (this.hidden) {
 
         this.onshow && this.onshow();
         this.hidden = false;
@@ -905,25 +1004,25 @@ WinBox.prototype.show = function(state){
  * @this WinBox
  */
 
-WinBox.prototype.minimize = function(state){
+WinBox.prototype.minimize = function (state) {
 
-    if(state === false){
+    if (state === false) {
 
         return this.restore();
     }
 
-    if(is_fullscreen){
+    if (is_fullscreen) {
 
         cancel_fullscreen();
     }
 
-    if(this.max){
+    if (this.max) {
 
         this.removeClass("max");
         this.max = false;
     }
 
-    if(!this.min){
+    if (!this.min) {
 
         stack_min.push(this);
         update_min_stack();
@@ -940,21 +1039,21 @@ WinBox.prototype.minimize = function(state){
  * @this WinBox
  */
 
-WinBox.prototype.restore = function(){
+WinBox.prototype.restore = function () {
 
-    if(is_fullscreen){
+    if (is_fullscreen) {
 
         cancel_fullscreen();
     }
 
-    if(this.min){
+    if (this.min) {
 
         remove_min_stack(this);
         this.resize().move();
         this.onrestore && this.onrestore();
     }
 
-    if(this.max){
+    if (this.max) {
 
         this.max = false;
         this.removeClass("max").resize().move();
@@ -969,24 +1068,24 @@ WinBox.prototype.restore = function(){
  * @this WinBox
  */
 
-WinBox.prototype.maximize = function(state){
+WinBox.prototype.maximize = function (state) {
 
-    if(state === false){
+    if (state === false) {
 
         return this.restore();
     }
 
-    if(is_fullscreen){
+    if (is_fullscreen) {
 
         cancel_fullscreen();
     }
 
-    if(this.min){
+    if (this.min) {
 
         remove_min_stack(this);
     }
 
-    if(!this.max){
+    if (!this.max) {
 
         this.addClass("max").resize(
 
@@ -1013,9 +1112,9 @@ WinBox.prototype.maximize = function(state){
  * @this WinBox
  */
 
-WinBox.prototype.fullscreen = function(state){
+WinBox.prototype.fullscreen = function (state) {
 
-    if(this.min){
+    if (this.min) {
 
         remove_min_stack(this);
         this.resize().move();
@@ -1023,7 +1122,7 @@ WinBox.prototype.fullscreen = function(state){
 
     // fullscreen could be changed by user manually!
 
-    if(!is_fullscreen || !cancel_fullscreen()){
+    if (!is_fullscreen || !cancel_fullscreen()) {
 
         // requestFullscreen is executed as async and returns promise.
         // in this case it is better to set the state to "this.full" after the requestFullscreen was fired,
@@ -1034,7 +1133,7 @@ WinBox.prototype.fullscreen = function(state){
         this.full = true;
         this.onfullscreen && this.onfullscreen();
     }
-    else if(state === false){
+    else if (state === false) {
 
         return this.restore();
     }
@@ -1042,7 +1141,7 @@ WinBox.prototype.fullscreen = function(state){
     return this;
 };
 
-function has_fullscreen(){
+function has_fullscreen() {
 
     return (
 
@@ -1057,11 +1156,11 @@ function has_fullscreen(){
  * @return {boolean|void}
  */
 
-function cancel_fullscreen(){
+function cancel_fullscreen() {
 
     is_fullscreen.full = false;
 
-    if(has_fullscreen()){
+    if (has_fullscreen()) {
 
         // exitFullscreen is executed as async and returns promise.
         // the important part is that the promise callback runs before the event "onresize" was fired!
@@ -1076,14 +1175,14 @@ function cancel_fullscreen(){
  * @this WinBox
  */
 
-WinBox.prototype.close = function(force) {
+WinBox.prototype.close = function (force) {
 
-    if(this.onclose && this.onclose(force)){
+    if (this.onclose && this.onclose(force)) {
 
         return true;
     }
 
-    if(this.min){
+    if (this.min) {
 
         remove_min_stack(this);
     }
@@ -1095,11 +1194,16 @@ WinBox.prototype.close = function(force) {
     this.body = null;
     this.dom = null;
 
-    if(last_focus === this){
+    if (last_focus === this) {
 
         last_focus = null;
 
         // TODO focus next window
+    }
+    if (this.alwaysShow) {
+        WinBox['_list'].splice(WinBox['_list'].indexOf(WinBox['_list'].find((item) => item.id === this.id)), 1);
+    } else {
+        WinBox['list'].splice(WinBox['list'].indexOf(WinBox['list'].find((item) => item.id === this.id)), 1);
     }
 };
 
@@ -1110,14 +1214,14 @@ WinBox.prototype.close = function(force) {
  * @this WinBox
  */
 
-WinBox.prototype.move = function(x, y, _skip_update){
+WinBox.prototype.move = function (x, y, _skip_update) {
 
-    if(!x && (x !== 0)){
+    if (!x && (x !== 0)) {
 
         x = this.x;
         y = this.y;
     }
-    else if(!_skip_update){
+    else if (!_skip_update) {
 
         this.x = x ? x = parse(x, root_w - this.left - this.right, this.width) : 0;
         this.y = y ? y = parse(y, root_h - this.top - this.bottom, this.height) : 0;
@@ -1126,6 +1230,7 @@ WinBox.prototype.move = function(x, y, _skip_update){
     //setStyle(this.dom, "transform", "translate(" + x + "px," + y + "px)");
     setStyle(this.dom, "left", x + "px");
     setStyle(this.dom, "top", y + "px");
+    setStyle(this.dom, "scale", this.scale);
 
     this.onmove && this.onmove(x, y);
     return this;
@@ -1138,14 +1243,14 @@ WinBox.prototype.move = function(x, y, _skip_update){
  * @this WinBox
  */
 
-WinBox.prototype.resize = function(w, h, _skip_update){
+WinBox.prototype.resize = function (w, h, _skip_update) {
 
-    if(!w && (w !== 0)){
+    if (!w && (w !== 0)) {
 
         w = this.width;
         h = this.height;
     }
-    else if(!_skip_update){
+    else if (!_skip_update) {
 
         this.width = w ? w = parse(w, this.maxwidth /*- this.left - this.right*/) : 0;
         this.height = h ? h = parse(h, this.maxheight /*- this.top - this.bottom*/) : 0;
@@ -1156,6 +1261,7 @@ WinBox.prototype.resize = function(w, h, _skip_update){
 
     setStyle(this.dom, "width", w + "px");
     setStyle(this.dom, "height", h + "px");
+    setStyle(this.dom, "scale", this.scale);
 
     this.onresize && this.onresize(w, h);
     return this;
@@ -1166,7 +1272,7 @@ WinBox.prototype.resize = function(w, h, _skip_update){
  * @this WinBox
  */
 
-WinBox.prototype.addControl = function(control){
+WinBox.prototype.addControl = function (control) {
 
     const classname = control["class"];
     const image = control.image;
@@ -1176,9 +1282,9 @@ WinBox.prototype.addControl = function(control){
     const icons = getByClass(this.dom, "wb-control");
     const self = this;
 
-    if(classname) node.className = classname;
-    if(image) setStyle(node, "background-image", "url(" + image + ")");
-    if(click) node.onclick = function(event){ click.call(this, event, self) };
+    if (classname) node.className = classname;
+    if (image) setStyle(node, "background-image", "url(" + image + ")");
+    if (click) node.onclick = function (event) { click.call(this, event, self) };
 
     icons.insertBefore(node, icons.childNodes[index || 0]);
 
@@ -1190,7 +1296,7 @@ WinBox.prototype.addControl = function(control){
  * @this WinBox
  */
 
-WinBox.prototype.removeControl = function(control){
+WinBox.prototype.removeControl = function (control) {
 
     control = getByClass(this.dom, control);
     control && control.remove();
@@ -1202,7 +1308,7 @@ WinBox.prototype.removeControl = function(control){
  * @this WinBox
  */
 
-WinBox.prototype.addClass = function(classname){
+WinBox.prototype.addClass = function (classname) {
 
     addClass(this.dom, classname);
     return this;
@@ -1213,7 +1319,7 @@ WinBox.prototype.addClass = function(classname){
  * @this WinBox
  */
 
-WinBox.prototype.removeClass = function(classname){
+WinBox.prototype.removeClass = function (classname) {
 
     removeClass(this.dom, classname);
     return this;
@@ -1225,7 +1331,7 @@ WinBox.prototype.removeClass = function(classname){
  * @this WinBox
  */
 
-WinBox.prototype.hasClass = function(classname){
+WinBox.prototype.hasClass = function (classname) {
 
     return hasClass(this.dom, classname);
 };
@@ -1235,7 +1341,7 @@ WinBox.prototype.hasClass = function(classname){
  * @this WinBox
  */
 
-WinBox.prototype.toggleClass = function(classname){
+WinBox.prototype.toggleClass = function (classname) {
 
     return this.hasClass(classname) ? this.removeClass(classname) : this.addClass(classname);
 };

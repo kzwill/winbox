@@ -42,6 +42,13 @@ import WinBox from "./winbox.js";
 /** @export */ WinBox.right;
 /** @export */ WinBox.bottom;
 /** @export */ WinBox.left;
+/** @export */ WinBox.url;
+/** @export */ WinBox.scale;
+/** @export */ WinBox.winbox;
+/** @export */ WinBox.alwaysShow;
+/** @export */ WinBox.remark;
+/** @export */ WinBox.classname;
+/** @export */ WinBox.clazz;
 
 /** @export */ WinBox.oncreate;
 /** @export */ WinBox.onclose;
